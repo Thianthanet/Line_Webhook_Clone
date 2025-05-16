@@ -26,6 +26,15 @@ app.use(favicon(path.join(__dirname, "public", "favicon.ico")))
 readdirSync('./routes').map((item) => app.use('/api', require('./routes/' + item)))
 app.use('/webhook', webhookRoute)
 
+app.get('/', (req, res) => {
+  try {
+    res.json({ message: "API Created by Thianthanet" })
+  } catch (error) {
+    console.log(error)
+    res.status(500).json({ message: "Server Error" })
+  }
+})
+
 
 app.listen(PORT, () => {
   console.log(`✅ Server running at http://localhost:${PORT}`)
