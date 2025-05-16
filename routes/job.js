@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2; // Use Cloudinary SDK
-const { createJob } = require('../controllers/job');
+const { createJob, repairHistoryUser } = require('../controllers/job');
 const streamifier = require('streamifier');
 require('dotenv').config();
 
@@ -74,5 +74,7 @@ router.post(
   uploadToCloudinary,
   createJob, // Your controller to create the job in the database
 );
+
+router.get('/history-repair/:id', repairHistoryUser)
 
 module.exports = router;

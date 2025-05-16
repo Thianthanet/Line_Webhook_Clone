@@ -172,3 +172,18 @@ exports.createJob = async (req, res) => {
     }
 }
 
+exports.repairHistoryUser = async (req, res) => {
+    try {
+        const { id } = req.params
+        const job = await prisma.job.findMany({
+            where: { userId: id },
+            orderBy: {
+                id: 'asc'
+            }
+        })
+        res.json({ message: "Get repair history successed!!", data: job })
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({ message: "Server error" })
+    }
+}
