@@ -1,5 +1,6 @@
 const prisma = require('../config/prisma')
 const axios = require('axios')
+const dayjs = require('dayjs')
 require('dotenv').config()
 
 const { cloudinary } = require('../config/cloudinary')
@@ -7,61 +8,38 @@ const { cloudinary } = require('../config/cloudinary')
 const LINE_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN
 const TECHNICIAN_GROUP_ID = process.env.LINE_GROUP_ID
 
-const generateJobId = async () => {
+const generateJobIdTCH = async () => {
     const now = new Date()
     const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '')
-    const jobsToday = await prisma.job.findMany({
+    const jobsToday = await prisma.technicianJob.findMany({
         where: { jobId: { startsWith: dateStr } }
     })
 
     const sequence = String(jobsToday.length + 1).padStart(4, '0')
-    return `${dateStr}${sequence}`
+    return `${dateStr}${sequence}THC`
 }
 
-// === Line flex: user ===
-const sendFlexToUser = async (userId, job, user) => {
-    const msg = {
-        to: userId,
-        messages: [ // แก้จาก 'essages' เป็น 'messages'
-            {
-                type: 'flex',
-                altText: `📋 แจ้งซ่อมสำเร็จ: ${job.jobId}`,
-                contents: {
-                    type: 'bubble',
-                    body: {
-                        type: 'box',
-                        layout: 'vertical',
-                        contents: [
-                            { type: 'text', text: '✅ แจ้งซ่อมสำเร็จ', weight: 'bold', size: 'lg' },
-                            { type: 'text', text: `หมายเลขงาน: ${job.jobId}`, margin: 'md' },
-                            { type: 'text', text: `สถานะ: รอรับเรื่อง`, color: '#FF0000', size: 'lg', margin: 'lg' },
-                        ]
-                    }
-                }
-            }
-        ]
-    }
-    await pushToLine(msg)
-}
-
-// === Line flex: group technician ===
 const sendFlexToGroup = async (groupId, job, user) => {
+    const formattedTimestamp = dayjs(job.timestamp).format('DD-MM-YYYY HH:mm')
+
     const msg = {
         to: groupId,
         messages: [
             {
                 type: 'flex',
                 altText: `📢 แจ้งซ่อมใหม่: ${job.jobId}`,
-                contents: {
+                contents: { 
                     type: 'bubble',
                     body: {
                         type: 'box',
                         layout: 'vertical',
                         contents: [
-                            { type: 'text', text: `📢 งานใหม่ #${job.jobId}`, weight: 'bold', size: 'lg' },
-                            { type: 'text', text: `ชื่อผู้แจ้ง: ${user.firstName} ${user.lastName}` },
+                            { type: 'text', text: `📢 งานใหม่ #${job.jobId}`, weight: 'bold', size: 'lg', wrap: true },
+                            { type: 'text', text: `ชื่อผู้แจ้ง: ${job.customerName}`},
+                            { type: 'text', text: `เจ้าหน้าที่: ${user.firstName} ${user.lastName}`},
                             { type: 'text', text: `ประเภท: ${job.type}` },
                             { type: 'text', text: `สถานที่: ${job.location}` },
+                            { type: 'text', text: `เวลา: ${formattedTimestamp}` },
                             { type: 'text', text: `รายละเอียด: ${job.description}`, wrap: true },
                             {
                                 type: 'image',
@@ -113,20 +91,13 @@ const pushToLine = async (payload) => {
     })
 }
 
-// ========== createJob (อัปโหลดไป Cloudinary) ==========
-exports.createJob = async (req, res) => {
+exports.createJobTCH = async (req, res) => {
     try {
-        const { userId, type, description, location } = req.body
-        console.log(userId, type, description, location)
-        if (!userId || !type || !description || !location) {
-            return res.status(400).send("Missing required fields");
-        }
-
+        const { userId, type, location, description, customerName } = req.body
+        const rawTimestamp = req.body.timestamp
+        const timestamp = rawTimestamp ? new Date(rawTimestamp.replace(' ', 'T')) : undefined
         const image1 = req.files?.image1?.[0]
         const image2 = req.files?.image2?.[0]
-        if (!image1 || !image2) {
-            return res.status(400).json({ error: "กรุณาอัปโหลดรูปภาพทั้ง 2 รูป" })
-        }
 
         const uploadImage = (fileBuffer) => {
             return new Promise((resolve, reject) => {
@@ -147,44 +118,28 @@ exports.createJob = async (req, res) => {
         ])
 
         const user = await prisma.user.findFirst({ where: { userId } })
-        if (!user) return res.status(404).json({ error: "User not found" })
 
-        const jobId = await generateJobId()
-        const job = await prisma.job.create({
+        const jobId = await generateJobIdTCH()
+
+        const jobtech = await prisma.technicianJob.create({
             data: {
-                jobId,
-                userId: user.userId,
+                userId,
                 type,
+                jobId,
+                customerName,
                 description,
+                location,
                 image1: image1Url,
                 image2: image2Url,
-                location,
-                status: 'PENDING'
+                timestamp,
+                status: 'PENDING',
             }
         })
 
-        await sendFlexToUser(userId, job, user)
-        await sendFlexToGroup(TECHNICIAN_GROUP_ID, job, user)
-
-        res.json({ message: "Job created and Line messages sent", job })
-    } catch (error) {
-        console.error(error)
-        res.status(500).json({ error: "Internal Server Error" })
-    }
-}
-
-exports.repairHistoryUser = async (req, res) => {
-    try {
-        const { id } = req.params
-        const job = await prisma.job.findMany({
-            where: { userId: id },
-            orderBy: {
-                id: 'asc'
-            }
-        })
-        res.json({ message: "Get repair history successed!!", data: job })
+        await sendFlexToGroup(TECHNICIAN_GROUP_ID, jobtech, user)
+        res.json({ message: "Job create successded and sent to line message ", data: jobtech })
     } catch (error) {
         console.log(error)
-        res.status(500).json({ message: "Server error" })
+        res.status(500).json({ message: "Server Error" })
     }
 }

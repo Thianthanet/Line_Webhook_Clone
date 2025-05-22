@@ -9,34 +9,62 @@ datasource db {
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
-  firstName    String
-  lastName     String
-  phone        String   @unique
-  location     String
-  role         String   @default("user")
-  userId       String?  @unique
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  assignedJobs Job[]    @relation("TechnicianJobs")
-  jobs         Job[]    @relation("UserJobs")
+  id        Int      @id @default(autoincrement())
+  userId    String?  @unique // ใช้เป็น key หลักในการอ้างอิง
+  firstName String
+  lastName  String
+  phone     String   @unique
+  location  String
+  role      String   @default("user")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignedJobs     Job[]           @relation("TechnicianJobs")
+  jobs             Job[]           @relation("UserJobs")
+  techJobsCreated  TechnicianJob[] @relation("TechnicianJobCreated")
+  techJobsAssigned TechnicianJob[] @relation("TechnicianJobAssigned")
 }
 
 model Job {
   id           Int       @id @default(autoincrement())
+  jobId        String    @unique
   userId       String
+  technicianId String?
   description  String    @db.Text
   image1       String
   image2       String
   status       JobStatus @default(PENDING)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
-  jobId        String
-  technicianId String?
   location     String
   type         String
-  technician   User?     @relation("TechnicianJobs", fields: [technicianId], references: [userId])
-  user         User      @relation("UserJobs", fields: [userId], references: [userId])
+
+  user       User  @relation("UserJobs", fields: [userId], references: [userId])
+  technician User? @relation("TechnicianJobs", fields: [technicianId], references: [userId])
+}
+
+model TechnicianJob {
+  id           Int       @id @default(autoincrement())
+  jobId        String
+  userId       String // ผู้แจ้ง
+  technicianId String? // ผู้รับงาน
+  customerName String?
+  description  String?   @db.Text
+  image1       String?
+  image2       String?
+  image3       String?
+  image4       String?
+  signature    String?
+  location     String?
+  type         String?
+  timestamp    DateTime?
+  detailAction String?   @db.Text
+  status       JobStatus @default(PENDING)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  creator    User  @relation("TechnicianJobCreated", fields: [userId], references: [userId])
+  technician User? @relation("TechnicianJobAssigned", fields: [technicianId], references: [userId])
 }
 
 enum JobStatus {
